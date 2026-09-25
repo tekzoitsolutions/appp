@@ -3,7 +3,6 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   CheckCircle,
   Phone,
-  MessageSquare,
   Share2,
   AlertTriangle,
   MapPin,
@@ -17,7 +16,8 @@ import {
   Building,
 } from 'lucide-react';
 import { getDoctorById } from '../../services/doctorService';
-import { ChatModal } from '../../components/common/ChatModal';
+import { WhatsAppIcon } from '../../components/common/WhatsAppIcon';
+import { openWhatsAppDirect } from '../../lib/whatsappHelper';
 import { QRCodeModal } from '../../components/common/QRCodeModal';
 import { ReportDoctorModal } from '../../components/common/ReportDoctorModal';
 import { useToast } from '../../context/ToastContext';
@@ -27,7 +27,6 @@ export const DoctorProfile = () => {
   const navigate = useNavigate();
   const [doctor, setDoctor] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [chatOpen, setChatOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const { addToast } = useToast();
@@ -78,6 +77,10 @@ export const DoctorProfile = () => {
     } else {
       addToast('Phone number not provided', 'info');
     }
+  };
+
+  const handleWhatsApp = () => {
+    openWhatsAppDirect(doctor, addToast);
   };
 
   const currentUrl = window.location.href;
@@ -172,11 +175,12 @@ export const DoctorProfile = () => {
           </button>
 
           <button
-            onClick={() => setChatOpen(true)}
-            className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-[#E3060B] text-white hover:bg-[#C20408] text-xs font-bold transition-colors shadow-sm"
+            onClick={handleWhatsApp}
+            title={doctor.phone_visible ? 'Direct WhatsApp Message' : 'Contact number private'}
+            className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-[#25D366] text-white hover:bg-[#20ba5a] text-xs font-bold transition-colors shadow-sm"
           >
-            <MessageSquare className="w-4 h-4" />
-            Chat
+            <WhatsAppIcon className="w-4 h-4" />
+            WhatsApp
           </button>
 
           <button
@@ -282,11 +286,6 @@ export const DoctorProfile = () => {
       </div>
 
       {/* Modals */}
-      <ChatModal
-        isOpen={chatOpen}
-        onClose={() => setChatOpen(false)}
-        doctor={doctor}
-      />
       <QRCodeModal
         isOpen={qrOpen}
         onClose={() => setQrOpen(false)}

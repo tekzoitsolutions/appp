@@ -3,23 +3,28 @@ import { Link } from 'react-router-dom';
 import {
   CheckCircle,
   Phone,
-  MessageSquare,
   MapPin,
   Briefcase,
   Share2,
   AlertTriangle,
   Star,
 } from 'lucide-react';
-import { ChatModal } from '../common/ChatModal';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
+import { openWhatsAppDirect } from '../../lib/whatsappHelper';
 import { QRCodeModal } from '../common/QRCodeModal';
 import { ReportDoctorModal } from '../common/ReportDoctorModal';
 import { useToast } from '../../context/ToastContext';
 
 export const DoctorCard = ({ doctor }) => {
-  const [chatOpen, setChatOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const { addToast } = useToast();
+
+  const handleWhatsApp = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openWhatsAppDirect(doctor, addToast);
+  };
 
   const handleCall = () => {
     if (!doctor.phone_visible) {
@@ -145,21 +150,17 @@ export const DoctorCard = ({ doctor }) => {
           </button>
 
           <button
-            onClick={() => setChatOpen(true)}
-            title="Chat with Doctor"
-            className="col-span-3 flex items-center justify-center py-2 px-2 rounded-xl border border-[#E0E6EF] text-[#111827] hover:bg-[#FFF0F0] hover:text-[#E3060B] hover:border-[#E3060B] transition-colors"
+            onClick={handleWhatsApp}
+            title={doctor.phone_visible ? 'WhatsApp Direct Message' : 'Phone private'}
+            aria-label="WhatsApp Direct Message"
+            className="col-span-3 flex items-center justify-center py-2 px-2 rounded-xl border border-[#E0E6EF] text-[#25D366] hover:bg-[#EBF9F1] hover:border-[#25D366] transition-colors"
           >
-            <MessageSquare className="w-4 h-4" />
+            <WhatsAppIcon className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {/* Embedded Modals */}
-      <ChatModal
-        isOpen={chatOpen}
-        onClose={() => setChatOpen(false)}
-        doctor={doctor}
-      />
       <QRCodeModal
         isOpen={qrOpen}
         onClose={() => setQrOpen(false)}
