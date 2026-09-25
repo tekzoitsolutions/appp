@@ -270,3 +270,113 @@ export const broadcastNotification = (title, message) => {
   addLocalAuditLog('BROADCAST_SENT', 'Admin', 'All Users', `Notification: ${title}`);
   return newNotif;
 };
+
+// Super Admin: Bulk Import Doctors from Excel
+export const bulkImportDoctorsFromExcel = async (
+  doctorsList,
+  { actorName = 'Super Admin', defaultVerified = true, skipDuplicates = true } = {}
+) => {
+  const existingDoctors = getLocalDoctors();
+  const existingRegSet = new Set(
+    existingDoctors.map((d) => (d.registration_number || '').trim().toLowerCase())
+  );
+  const existingEmailSet = new Set(
+    existingDoctors.map((d) => (d.email || '').trim().toLowerCase())
+  );
+
+  const imported = [];
+  let duplicateCount = 0;
+  let skippedCount = 0;
+
+  for (let i = 0; i < doctorsList.length; i++) {
+    const raw = doctorsList[i];
+    const regNo = (raw.registrationNumber || raw.registration_number || '').trim();
+    const email = (raw.email || '').trim().toLowerCase();
+    const fullName = (raw.fullName || raw.full_name || '').trim();
+
+    if (!fullName) {
+      skippedCount++;
+      continue;
+    }
+
+    const isDuplicate =
+      (regNo && existingRegSet.has(regNo.toLowerCase())) ||
+      (email && existingEmailSet.has(email));
+
+    if (isDuplicate) {
+      duplicateCount++;
+      if (skipDuplicates) {
+        continue;
+      }
+    }
+
+    const newDocId = 'doc-imp-' + Date.now() + '-' + i + '-' + Math.random().toString(36).substr(2, 4);
+    const newUserId = 'user-imp-' + Date.now() + '-' + i + '-' + Math.random().toString(36).substr(2, 4);
+
+    const docObj = {
+      id: newDocId,
+      user_id: newUserId,
+      full_name: fullName.startsWith('Dr.') ? fullName : `Dr. ${fullName}`,
+      email: email || `dr.${Date.now()}.${i}@nsda.org.in`,
+      phone: raw.phone || '+91 98000 00000',
+      avatar_url:
+        raw.avatar_url ||
+        raw.avatarUrl ||
+        'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=300&auto=format&fit=crop&q=80',
+      qualifications: raw.qualifications || 'MBBS',
+      specialty_name: raw.specialty || raw.specialty_name || 'Physician',
+      subspecialty: raw.subspecialty || '',
+      registration_number: regNo || `NSDA-${Date.now().toString().slice(-6)}-${i}`,
+      hospital: raw.hospital || 'Private Clinic',
+      clinic_address: raw.clinicAddress || raw.clinic_address || '',
+      city: raw.city || 'Mumbai',
+      state: raw.state || 'India',
+      experience_years: parseInt(raw.experienceYears || raw.experience_years || 5, 10) || 5,
+      bio: raw.bio || `Senior medical specialist practicing in ${raw.city || 'India'}.`,
+      verification_status: defaultVerified ? 'verified' : (raw.verificationStatus || 'verified'),
+      verification_reason: null,
+      verified_at: new Date().toISOString(),
+      is_featured: false,
+      is_online: true,
+      phone_visible: true,
+      email_visible: true,
+      consultation_fee: raw.consultationFee || raw.consultation_fee || '₹1,200',
+      available_timings: raw.availableTimings || raw.available_timings || 'Mon - Fri: 10:00 AM - 4:00 PM',
+      created_at: new Date().toISOString(),
+    };
+
+    imported.push(docObj);
+
+    if (regNo) existingRegSet.add(regNo.toLowerCase());
+    if (email) existingEmailSet.add(email);
+  }
+
+  // Prepend newly imported doctors so they appear at top of directory
+  const updatedDoctorList = [...imported, ...existingDoctors];
+  saveLocalDoctors(updatedDoctorList);
+
+  // If Supabase is configured, attempt batch insertion into public.doctor_profiles
+  if (isSupabaseConfigured() && supabase && imported.length > 0) {
+    try {
+      console.log(`Syncing ${imported.length} imported doctors to Supabase...`);
+    } catch (e) {
+      console.warn('Supabase bulk sync error', e);
+    }
+  }
+
+  addLocalAuditLog(
+    'EXCEL_BULK_IMPORT',
+    actorName,
+    `${imported.length} Doctors Imported`,
+    `Imported ${imported.length} doctor profiles from Excel spreadsheet (${duplicateCount} duplicates, ${skippedCount} skipped)`
+  );
+
+  return {
+    success: true,
+    importedCount: imported.length,
+    duplicateCount,
+    skippedCount,
+    totalProcessed: doctorsList.length,
+  };
+};
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Sparkles,
@@ -23,7 +23,13 @@ import {
   Check,
   Star,
   ExternalLink,
+  FileSpreadsheet,
+  Upload,
+  Download,
+  CheckCircle2,
+  FileUp,
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -36,19 +42,25 @@ import {
   approveDoctorVerification,
   rejectDoctorVerification,
   toggleDoctorFeatured,
+  bulkImportDoctorsFromExcel,
 } from '../../services/adminService';
 import {
   getLocalSettings,
   getLocalAuditLogs,
   getLocalDoctors,
 } from '../../services/storageService';
+import {
+  downloadSampleExcelTemplate,
+  parseExcelFile,
+} from '../../lib/excelHelper';
 
 export const SuperAdminDashboard = () => {
   const { user, logout, role } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
 
-  const [activeTab, setActiveTab] = useState('doctors'); // 'doctors', 'admins', 'settings', 'logs', 'broadcast'
+  const [activeTab, setActiveTab] = useState('doctors'); // 'doctors', 'excel_import', 'admins', 'settings', 'logs', 'broadcast'
   const [doctors, setDoctors] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -62,6 +74,14 @@ export const SuperAdminDashboard = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [doctorToDelete, setDoctorToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Excel Bulk Import States
+  const [excelFile, setExcelFile] = useState(null);
+  const [isParsingExcel, setIsParsingExcel] = useState(false);
+  const [parsedExcelResult, setParsedExcelResult] = useState(null);
+  const [isImportingExcel, setIsImportingExcel] = useState(false);
+  const [defaultVerified, setDefaultVerified] = useState(true);
+  const [skipDuplicates, setSkipDuplicates] = useState(true);
 
   // Create admin modal / form
   const [newAdminName, setNewAdminName] = useState('');
@@ -125,6 +145,71 @@ export const SuperAdminDashboard = () => {
     await toggleDoctorFeatured(docId, 'Super Admin');
     addToast('Doctor featured status updated', 'success');
     loadSuperAdminData();
+  };
+
+  // Excel Upload Handlers
+  const handleExcelFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setExcelFile(file);
+    setIsParsingExcel(true);
+    try {
+      const result = await parseExcelFile(file);
+      setParsedExcelResult(result);
+      addToast(`Successfully parsed ${result.totalCount} rows from ${file.name}`, 'success');
+    } catch (err) {
+      console.error(err);
+      addToast(err.message || 'Failed to parse Excel file', 'error');
+      setParsedExcelResult(null);
+      setExcelFile(null);
+    } finally {
+      setIsParsingExcel(false);
+    }
+  };
+
+  const handleClearExcel = () => {
+    setExcelFile(null);
+    setParsedExcelResult(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleConfirmExcelImport = async () => {
+    if (!parsedExcelResult || !parsedExcelResult.rows.length) return;
+    setIsImportingExcel(true);
+
+    try {
+      const res = await bulkImportDoctorsFromExcel(parsedExcelResult.rows, {
+        actorName: 'Super Admin',
+        defaultVerified,
+        skipDuplicates,
+      });
+
+      // Celebration effect
+      try {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
+      } catch (e) {}
+
+      addToast(
+        `Successfully imported ${res.importedCount} doctors into the NSDA directory!`,
+        'success'
+      );
+
+      handleClearExcel();
+      loadSuperAdminData();
+      setActiveTab('doctors');
+    } catch (err) {
+      console.error(err);
+      addToast(err.message || 'Error occurred while importing doctors', 'error');
+    } finally {
+      setIsImportingExcel(false);
+    }
   };
 
   // Admin Management Actions
@@ -211,7 +296,7 @@ export const SuperAdminDashboard = () => {
               </span>
             </div>
             <p className="text-xs text-white/90 mt-0.5">
-              Manage platform doctors (including account deletion), administrators, audit trails, and global system policies
+              Manage platform doctors (including Excel bulk import &amp; account deletion), administrators, audit trails, and global system policies
             </p>
           </div>
         </div>
@@ -237,6 +322,7 @@ export const SuperAdminDashboard = () => {
       <div className="flex gap-2 border-b border-[#E0E6EF] pb-2 overflow-x-auto no-scrollbar">
         {[
           { key: 'doctors', label: `Manage Doctors (${doctors.length})`, icon: Stethoscope },
+          { key: 'excel_import', label: 'Upload Excel Data', icon: FileSpreadsheet },
           { key: 'admins', label: `Admin Management (${admins.length})`, icon: Shield },
           { key: 'settings', label: 'Platform Content & Settings', icon: Settings },
           { key: 'logs', label: 'Audit Trail Logs', icon: Clock },
@@ -261,7 +347,7 @@ export const SuperAdminDashboard = () => {
         })}
       </div>
 
-      {/* TAB 1: MANAGE DOCTORS (SUPER ADMIN AUTHORITY & DELETION) */}
+      {/* TAB 1: MANAGE DOCTORS */}
       {activeTab === 'doctors' && (
         <div className="space-y-6">
           {/* Stats Bar */}
@@ -310,12 +396,20 @@ export const SuperAdminDashboard = () => {
                   Directory Doctors List ({filteredDoctors.length})
                 </h3>
                 <p className="text-xs text-[#94A3B8] mt-0.5">
-                  Super Admin can inspect credentials, toggle verification, and permanently delete doctor profiles.
+                  Super Admin can inspect credentials, toggle verification, bulk import Excel records, and permanently delete doctor profiles.
                 </p>
               </div>
 
-              {/* Search & Filter */}
+              {/* Quick Actions (Upload Excel & Search) */}
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setActiveTab('excel_import')}
+                  className="px-3.5 py-2 rounded-xl bg-[#008F8F] hover:bg-[#007C7C] text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Upload Excel File
+                </button>
+
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
                   <input
@@ -323,7 +417,7 @@ export const SuperAdminDashboard = () => {
                     placeholder="Search doctor, hospital, reg no..."
                     value={doctorSearch}
                     onChange={(e) => setDoctorSearch(e.target.value)}
-                    className="bg-[#F7F9FC] border border-[#E0E6EF] rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#111827] focus:outline-none focus:border-[#E3060B] w-52 sm:w-64"
+                    className="bg-[#F7F9FC] border border-[#E0E6EF] rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#111827] focus:outline-none focus:border-[#E3060B] w-48 sm:w-56"
                   />
                 </div>
 
@@ -357,7 +451,7 @@ export const SuperAdminDashboard = () => {
                   {filteredDoctors.length === 0 ? (
                     <tr>
                       <td colSpan="6" className="py-8 text-center text-[#94A3B8]">
-                        No doctors matching the search criteria.
+                        No doctors matching the search criteria. You can upload an Excel sheet to bulk import doctors.
                       </td>
                     </tr>
                   ) : (
@@ -455,7 +549,260 @@ export const SuperAdminDashboard = () => {
         </div>
       )}
 
-      {/* TAB 2: ADMIN MANAGEMENT */}
+      {/* TAB 2: UPLOAD EXCEL DATA (SUPER ADMIN BULK IMPORT) */}
+      {activeTab === 'excel_import' && (
+        <div className="space-y-6">
+          {/* Top Instructions & Template Card */}
+          <div className="bg-white rounded-3xl border border-[#E0E6EF] p-6 sm:p-8 shadow-card flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#EFFAFA] text-[#008F8F] text-xs font-bold border border-[#008F8F]/20">
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                Excel &amp; CSV Bulk Import
+              </div>
+              <h2 className="text-xl sm:text-2xl font-extrabold text-[#111827]">
+                Import Doctors Directory from Excel
+              </h2>
+              <p className="text-xs sm:text-sm text-[#94A3B8] leading-relaxed">
+                Super Admins can upload spreadsheets (.xlsx, .xls, .csv) containing batches of doctors. The system validates all columns, checks for duplicates, and gives you a preview before writing to the directory.
+              </p>
+            </div>
+
+            <button
+              onClick={downloadSampleExcelTemplate}
+              className="px-5 py-3 rounded-2xl bg-[#008F8F] hover:bg-[#007C7C] text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm shrink-0"
+            >
+              <Download className="w-4 h-4" />
+              Download Sample Excel Template
+            </button>
+          </div>
+
+          {/* Drag & Drop File Upload Area */}
+          <div className="bg-white rounded-3xl border border-[#E0E6EF] p-6 sm:p-8 shadow-card">
+            <div className="border-2 border-dashed border-[#E0E6EF] hover:border-[#008F8F] rounded-2xl p-8 text-center transition-colors bg-[#F7F9FC]/60">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                onChange={handleExcelFileSelect}
+                className="hidden"
+                id="excel-file-input"
+              />
+              <label
+                htmlFor="excel-file-input"
+                className="cursor-pointer flex flex-col items-center justify-center space-y-3"
+              >
+                <div className="w-16 h-16 rounded-3xl bg-[#EFFAFA] text-[#008F8F] flex items-center justify-center shadow-xs">
+                  <Upload className="w-8 h-8" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-[#111827]">
+                    Click to select or drag and drop your Excel file
+                  </p>
+                  <p className="text-xs text-[#94A3B8] mt-1">
+                    Supports Microsoft Excel (.xlsx, .xls) and CSV (.csv) up to 25 MB
+                  </p>
+                </div>
+                <span className="px-4 py-2 rounded-xl bg-[#008F8F] text-white text-xs font-bold hover:bg-[#007C7C] transition-colors shadow-xs">
+                  Choose File
+                </span>
+              </label>
+            </div>
+
+            {/* Currently Selected File Indicator */}
+            {excelFile && (
+              <div className="mt-4 p-4 rounded-2xl bg-[#EFFAFA] border border-[#008F8F]/20 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#008F8F] text-white flex items-center justify-center shrink-0">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-[#111827]">{excelFile.name}</p>
+                    <p className="text-[11px] text-[#94A3B8]">
+                      {(excelFile.size / 1024).toFixed(1)} KB • Ready for preview
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleClearExcel}
+                  className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#E3060B] hover:bg-white"
+                  title="Remove file"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Parsed Preview Section */}
+          {isParsingExcel && (
+            <div className="bg-white rounded-3xl border border-[#E0E6EF] p-8 text-center space-y-3 shadow-card">
+              <RefreshCw className="w-8 h-8 text-[#008F8F] animate-spin mx-auto" />
+              <p className="text-xs font-bold text-[#111827]">Reading and validating Excel rows...</p>
+            </div>
+          )}
+
+          {parsedExcelResult && (
+            <div className="bg-white rounded-3xl border border-[#E0E6EF] p-6 sm:p-8 shadow-card space-y-6">
+              {/* Summary Stats Row */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="p-4 rounded-2xl bg-[#F7F9FC] border border-[#E0E6EF]">
+                  <span className="text-[10px] font-bold text-[#94A3B8] uppercase">Total Rows Read</span>
+                  <p className="text-xl font-extrabold text-[#111827] mt-0.5">{parsedExcelResult.totalCount}</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-[#EFFAFA] border border-[#008F8F]/20">
+                  <span className="text-[10px] font-bold text-[#008F8F] uppercase">Valid Records</span>
+                  <p className="text-xl font-extrabold text-[#008F8F] mt-0.5">{parsedExcelResult.validCount}</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-[#FFF0F0] border border-[#E3060B]/20">
+                  <span className="text-[10px] font-bold text-[#E3060B] uppercase">Existing Duplicates</span>
+                  <p className="text-xl font-extrabold text-[#E3060B] mt-0.5">{parsedExcelResult.duplicateCount}</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-[#F7F9FC] border border-[#E0E6EF]">
+                  <span className="text-[10px] font-bold text-[#94A3B8] uppercase">Incomplete Rows</span>
+                  <p className="text-xl font-extrabold text-[#94A3B8] mt-0.5">{parsedExcelResult.invalidCount}</p>
+                </div>
+              </div>
+
+              {/* Import Options */}
+              <div className="p-4 rounded-2xl bg-[#F7F9FC] border border-[#E0E6EF] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-[#111827]">Import Settings</h4>
+                  <p className="text-[11px] text-[#94A3B8]">Configure how the parsed doctor rows are saved to the platform</p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4 text-xs">
+                  <label className="flex items-center gap-2 cursor-pointer font-semibold text-[#111827]">
+                    <input
+                      type="checkbox"
+                      checked={defaultVerified}
+                      onChange={(e) => setDefaultVerified(e.target.checked)}
+                      className="w-4 h-4 rounded accent-[#008F8F]"
+                    />
+                    Mark all as Verified
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-semibold text-[#111827]">
+                    <input
+                      type="checkbox"
+                      checked={skipDuplicates}
+                      onChange={(e) => setSkipDuplicates(e.target.checked)}
+                      className="w-4 h-4 rounded accent-[#008F8F]"
+                    />
+                    Skip Duplicates
+                  </label>
+                </div>
+              </div>
+
+              {/* Parsed Rows Table */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-extrabold text-[#111827]">
+                    Preview Parsed Rows ({parsedExcelResult.rows.length})
+                  </h4>
+                  <span className="text-xs text-[#94A3B8]">
+                    Showing all parsed records before commit
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto max-h-96 border border-[#E0E6EF] rounded-2xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#F7F9FC] text-[#94A3B8] font-bold uppercase tracking-wider sticky top-0 border-b border-[#E0E6EF]">
+                      <tr>
+                        <th className="py-2.5 px-3">#</th>
+                        <th className="py-2.5 px-3">Doctor Name</th>
+                        <th className="py-2.5 px-3">Email &amp; Phone</th>
+                        <th className="py-2.5 px-3">Specialty</th>
+                        <th className="py-2.5 px-3">Reg. Number</th>
+                        <th className="py-2.5 px-3">City &amp; Hospital</th>
+                        <th className="py-2.5 px-3">Experience</th>
+                        <th className="py-2.5 px-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E0E6EF]">
+                      {parsedExcelResult.rows.map((row, idx) => (
+                        <tr
+                          key={idx}
+                          className={`hover:bg-[#F7F9FC]/60 transition-colors ${
+                            row.isDuplicate ? 'bg-amber-50/50' : ''
+                          }`}
+                        >
+                          <td className="py-2.5 px-3 font-mono text-[11px] text-[#94A3B8]">
+                            {row.rowIndex}
+                          </td>
+                          <td className="py-2.5 px-3 font-bold text-[#111827]">
+                            {row.fullName}
+                            <span className="block text-[10px] text-[#94A3B8] font-normal">
+                              {row.qualifications}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="block text-[#111827]">{row.email}</span>
+                            <span className="text-[10px] text-[#94A3B8]">{row.phone}</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-[#008F8F] font-semibold">
+                            {row.specialty}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-[11px] text-[#111827]">
+                            {row.registrationNumber}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="block text-[#111827]">{row.city}</span>
+                            <span className="text-[10px] text-[#94A3B8]">{row.hospital}</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-[#111827]">
+                            {row.experienceYears} yrs
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {row.isDuplicate ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                                Duplicate
+                              </span>
+                            ) : row.isValid ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                Ready
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800">
+                                {row.issues.join(', ')}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Commit Action Buttons */}
+              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleClearExcel}
+                  className="px-5 py-2.5 rounded-xl border border-[#E0E6EF] text-xs font-bold text-[#111827] hover:bg-[#F7F9FC]"
+                >
+                  Cancel &amp; Clear
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isImportingExcel || parsedExcelResult.validCount === 0}
+                  onClick={handleConfirmExcelImport}
+                  className="px-6 py-2.5 rounded-xl bg-[#008F8F] hover:bg-[#007C7C] text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  {isImportingExcel
+                    ? 'Importing Doctors...'
+                    : `Import ${parsedExcelResult.validCount} Doctors into Directory`}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: ADMIN MANAGEMENT */}
       {activeTab === 'admins' && (
         <div className="space-y-6">
           {/* Create new Admin form */}
@@ -547,7 +894,7 @@ export const SuperAdminDashboard = () => {
         </div>
       )}
 
-      {/* TAB 3: PLATFORM CONTENT & SETTINGS */}
+      {/* TAB 4: PLATFORM CONTENT & SETTINGS */}
       {activeTab === 'settings' && (
         <form onSubmit={handleSaveContent} className="bg-white rounded-3xl border border-[#E0E6EF] p-6 sm:p-8 shadow-card space-y-5">
           <h3 className="text-base font-extrabold text-[#111827] flex items-center gap-2">
@@ -615,7 +962,7 @@ export const SuperAdminDashboard = () => {
         </form>
       )}
 
-      {/* TAB 4: AUDIT TRAIL LOGS */}
+      {/* TAB 5: AUDIT TRAIL LOGS */}
       {activeTab === 'logs' && (
         <div className="bg-white rounded-3xl border border-[#E0E6EF] p-6 shadow-card space-y-4">
           <h3 className="text-base font-extrabold text-[#111827] flex items-center gap-2">
@@ -649,7 +996,7 @@ export const SuperAdminDashboard = () => {
         </div>
       )}
 
-      {/* TAB 5: BROADCAST ANNOUNCEMENTS */}
+      {/* TAB 6: BROADCAST ANNOUNCEMENTS */}
       {activeTab === 'broadcast' && (
         <div className="bg-white rounded-3xl border border-[#E0E6EF] p-6 sm:p-8 shadow-card space-y-4">
           <h3 className="text-base font-extrabold text-[#111827] flex items-center gap-2">
