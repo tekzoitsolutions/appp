@@ -28,6 +28,8 @@ import {
   Download,
   CheckCircle2,
   FileUp,
+  Sliders,
+  HelpCircle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useAuth } from '../../context/AuthContext';
@@ -51,7 +53,9 @@ import {
 } from '../../services/storageService';
 import {
   downloadSampleExcelTemplate,
-  parseExcelFile,
+  parseWorkbook,
+  buildDoctorRecordsFromMapping,
+  TARGET_FIELDS,
 } from '../../lib/excelHelper';
 
 export const SuperAdminDashboard = () => {
@@ -78,10 +82,13 @@ export const SuperAdminDashboard = () => {
   // Excel Bulk Import States
   const [excelFile, setExcelFile] = useState(null);
   const [isParsingExcel, setIsParsingExcel] = useState(false);
+  const [workbookInfo, setWorkbookInfo] = useState(null);
+  const [columnMapping, setColumnMapping] = useState({});
   const [parsedExcelResult, setParsedExcelResult] = useState(null);
   const [isImportingExcel, setIsImportingExcel] = useState(false);
   const [defaultVerified, setDefaultVerified] = useState(true);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
+  const [showMappingPanel, setShowMappingPanel] = useState(true);
 
   // Create admin modal / form
   const [newAdminName, setNewAdminName] = useState('');
@@ -147,7 +154,7 @@ export const SuperAdminDashboard = () => {
     loadSuperAdminData();
   };
 
-  // Excel Upload Handlers
+  // Excel Upload & Smart Mapping Handlers
   const handleExcelFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -155,21 +162,65 @@ export const SuperAdminDashboard = () => {
     setExcelFile(file);
     setIsParsingExcel(true);
     try {
-      const result = await parseExcelFile(file);
-      setParsedExcelResult(result);
-      addToast(`Successfully parsed ${result.totalCount} rows from ${file.name}`, 'success');
+      const wbData = await parseWorkbook(file);
+      setWorkbookInfo(wbData);
+      setColumnMapping(wbData.autoMapping);
+      const records = buildDoctorRecordsFromMapping(
+        wbData.dataRows,
+        wbData.rawHeaders,
+        wbData.autoMapping
+      );
+      setParsedExcelResult(records);
+      addToast(`Detected ${wbData.dataRows.length} data rows & ${wbData.rawHeaders.length} columns from ${file.name}`, 'success');
     } catch (err) {
       console.error(err);
       addToast(err.message || 'Failed to parse Excel file', 'error');
       setParsedExcelResult(null);
+      setWorkbookInfo(null);
       setExcelFile(null);
     } finally {
       setIsParsingExcel(false);
     }
   };
 
+  const handleSheetChange = async (sheetName) => {
+    if (!excelFile) return;
+    setIsParsingExcel(true);
+    try {
+      const wbData = await parseWorkbook(excelFile, sheetName);
+      setWorkbookInfo(wbData);
+      setColumnMapping(wbData.autoMapping);
+      const records = buildDoctorRecordsFromMapping(
+        wbData.dataRows,
+        wbData.rawHeaders,
+        wbData.autoMapping
+      );
+      setParsedExcelResult(records);
+      addToast(`Switched to worksheet "${sheetName}" (${wbData.dataRows.length} rows)`, 'info');
+    } catch (err) {
+      addToast(err.message || 'Failed to switch sheet', 'error');
+    } finally {
+      setIsParsingExcel(false);
+    }
+  };
+
+  const handleMappingChange = (fieldKey, selectedHeader) => {
+    const newMapping = { ...columnMapping, [fieldKey]: selectedHeader };
+    setColumnMapping(newMapping);
+    if (workbookInfo) {
+      const updatedRecords = buildDoctorRecordsFromMapping(
+        workbookInfo.dataRows,
+        workbookInfo.rawHeaders,
+        newMapping
+      );
+      setParsedExcelResult(updatedRecords);
+    }
+  };
+
   const handleClearExcel = () => {
     setExcelFile(null);
+    setWorkbookInfo(null);
+    setColumnMapping({});
     setParsedExcelResult(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -296,7 +347,7 @@ export const SuperAdminDashboard = () => {
               </span>
             </div>
             <p className="text-xs text-white/90 mt-0.5">
-              Manage platform doctors (including Excel bulk import &amp; account deletion), administrators, audit trails, and global system policies
+              Manage platform doctors (including smart Excel bulk import &amp; account deletion), administrators, audit trails, and global system policies
             </p>
           </div>
         </div>
@@ -523,7 +574,7 @@ export const SuperAdminDashboard = () => {
                                 title="Approve Doctor"
                                 className="px-2.5 py-1.5 rounded-xl bg-[#008F8F] hover:bg-[#007C7C] text-white text-[11px] font-bold transition-colors flex items-center gap-1"
                               >
-                                <Check className="w-3 h-3" />
+                                <Check className="w-3.5 h-3.5" />
                                 Approve
                               </button>
                             )}
@@ -549,7 +600,7 @@ export const SuperAdminDashboard = () => {
         </div>
       )}
 
-      {/* TAB 2: UPLOAD EXCEL DATA (SUPER ADMIN BULK IMPORT) */}
+      {/* TAB 2: UPLOAD EXCEL DATA (SMART EXCEL BULK IMPORT & COLUMN MAPPER) */}
       {activeTab === 'excel_import' && (
         <div className="space-y-6">
           {/* Top Instructions & Template Card */}
@@ -557,13 +608,13 @@ export const SuperAdminDashboard = () => {
             <div className="space-y-2 max-w-2xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#EFFAFA] text-[#008F8F] text-xs font-bold border border-[#008F8F]/20">
                 <FileSpreadsheet className="w-3.5 h-3.5" />
-                Excel &amp; CSV Bulk Import
+                Smart Excel &amp; CSV Bulk Import
               </div>
               <h2 className="text-xl sm:text-2xl font-extrabold text-[#111827]">
                 Import Doctors Directory from Excel
               </h2>
               <p className="text-xs sm:text-sm text-[#94A3B8] leading-relaxed">
-                Super Admins can upload spreadsheets (.xlsx, .xls, .csv) containing batches of doctors. The system validates all columns, checks for duplicates, and gives you a preview before writing to the directory.
+                Upload any Excel spreadsheet (.xlsx, .xls, .csv). Our smart reader automatically finds the header row, normalizes column names, and allows you to customize the column mapping if your Excel file uses custom titles.
               </p>
             </div>
 
@@ -608,67 +659,156 @@ export const SuperAdminDashboard = () => {
               </label>
             </div>
 
-            {/* Currently Selected File Indicator */}
-            {excelFile && (
-              <div className="mt-4 p-4 rounded-2xl bg-[#EFFAFA] border border-[#008F8F]/20 flex items-center justify-between">
+            {/* Currently Selected File & Worksheet Selector */}
+            {workbookInfo && (
+              <div className="mt-4 p-4 rounded-2xl bg-[#EFFAFA] border border-[#008F8F]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-[#008F8F] text-white flex items-center justify-center shrink-0">
                     <FileSpreadsheet className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-[#111827]">{excelFile.name}</p>
+                    <p className="text-xs font-bold text-[#111827]">{workbookInfo.fileName}</p>
                     <p className="text-[11px] text-[#94A3B8]">
-                      {(excelFile.size / 1024).toFixed(1)} KB • Ready for preview
+                      {(workbookInfo.fileSize / 1024).toFixed(1)} KB • Header row detected at line {workbookInfo.headerRowIndex + 1} • {workbookInfo.dataRows.length} data rows
                     </p>
                   </div>
                 </div>
 
-                <button
-                  onClick={handleClearExcel}
-                  className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#E3060B] hover:bg-white"
-                  title="Remove file"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {workbookInfo.sheetNames.length > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-[#111827] font-semibold">Sheet:</span>
+                      <select
+                        value={workbookInfo.selectedSheet}
+                        onChange={(e) => handleSheetChange(e.target.value)}
+                        className="bg-white border border-[#008F8F]/40 rounded-xl px-2.5 py-1 text-xs text-[#008F8F] font-bold"
+                      >
+                        {workbookInfo.sheetNames.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleClearExcel}
+                    className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#E3060B] hover:bg-white"
+                    title="Remove file"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Parsed Preview Section */}
+          {/* Parsing State */}
           {isParsingExcel && (
             <div className="bg-white rounded-3xl border border-[#E0E6EF] p-8 text-center space-y-3 shadow-card">
               <RefreshCw className="w-8 h-8 text-[#008F8F] animate-spin mx-auto" />
-              <p className="text-xs font-bold text-[#111827]">Reading and validating Excel rows...</p>
+              <p className="text-xs font-bold text-[#111827]">Reading and analyzing spreadsheet structure...</p>
             </div>
           )}
 
-          {parsedExcelResult && (
-            <div className="bg-white rounded-3xl border border-[#E0E6EF] p-6 sm:p-8 shadow-card space-y-6">
+          {/* Interactive Column Mapping Panel & Parsed Records */}
+          {workbookInfo && parsedExcelResult && (
+            <div className="space-y-6">
+              {/* Column Mapping Section */}
+              <div className="bg-white rounded-3xl border border-[#E0E6EF] p-6 shadow-card space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E0E6EF] pb-3">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-[#111827] flex items-center gap-2">
+                      <Sliders className="w-4 h-4 text-[#008F8F]" />
+                      Column Mapping Assistant
+                    </h3>
+                    <p className="text-xs text-[#94A3B8] mt-0.5">
+                      Verify that each doctor field is mapped to the correct column in your Excel spreadsheet.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => setShowMappingPanel(!showMappingPanel)}
+                    className="text-xs font-bold text-[#008F8F] hover:underline self-start sm:self-auto"
+                  >
+                    {showMappingPanel ? 'Hide Column Mapping' : 'Show / Adjust Column Mapping'}
+                  </button>
+                </div>
+
+                {showMappingPanel && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
+                    {TARGET_FIELDS.slice(0, 12).map((field) => {
+                      const currentSelected = columnMapping[field.key] || '';
+                      const isMapped = !!currentSelected;
+
+                      return (
+                        <div
+                          key={field.key}
+                          className={`p-3 rounded-2xl border transition-all ${
+                            isMapped
+                              ? 'bg-[#F7F9FC] border-[#E0E6EF]'
+                              : field.required
+                              ? 'bg-[#FFF0F0]/60 border-[#E3060B]/30'
+                              : 'bg-white border-[#E0E6EF]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-xs font-bold text-[#111827] flex items-center gap-1">
+                              {field.label}
+                              {field.required && <span className="text-[#E3060B]">*</span>}
+                            </span>
+                            {isMapped ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-[#008F8F]" />
+                            ) : (
+                              <span className="text-[10px] text-[#94A3B8]">Not selected</span>
+                            )}
+                          </div>
+
+                          <select
+                            value={currentSelected}
+                            onChange={(e) => handleMappingChange(field.key, e.target.value)}
+                            className="w-full bg-white border border-[#E0E6EF] rounded-xl px-2.5 py-1.5 text-xs text-[#111827] font-medium focus:outline-none focus:border-[#008F8F]"
+                          >
+                            <option value="">-- Not in file / Auto-generate --</option>
+                            {workbookInfo.rawHeaders.map((header, hIdx) => (
+                              <option key={hIdx} value={header}>
+                                {header}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* Summary Stats Row */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="p-4 rounded-2xl bg-[#F7F9FC] border border-[#E0E6EF]">
-                  <span className="text-[10px] font-bold text-[#94A3B8] uppercase">Total Rows Read</span>
+                <div className="p-4 rounded-2xl bg-white border border-[#E0E6EF] shadow-card">
+                  <span className="text-[10px] font-bold text-[#94A3B8] uppercase">Total Data Rows</span>
                   <p className="text-xl font-extrabold text-[#111827] mt-0.5">{parsedExcelResult.totalCount}</p>
                 </div>
-                <div className="p-4 rounded-2xl bg-[#EFFAFA] border border-[#008F8F]/20">
-                  <span className="text-[10px] font-bold text-[#008F8F] uppercase">Valid Records</span>
+                <div className="p-4 rounded-2xl bg-[#EFFAFA] border border-[#008F8F]/20 shadow-card">
+                  <span className="text-[10px] font-bold text-[#008F8F] uppercase">Valid Doctors Ready</span>
                   <p className="text-xl font-extrabold text-[#008F8F] mt-0.5">{parsedExcelResult.validCount}</p>
                 </div>
-                <div className="p-4 rounded-2xl bg-[#FFF0F0] border border-[#E3060B]/20">
+                <div className="p-4 rounded-2xl bg-[#FFF0F0] border border-[#E3060B]/20 shadow-card">
                   <span className="text-[10px] font-bold text-[#E3060B] uppercase">Existing Duplicates</span>
                   <p className="text-xl font-extrabold text-[#E3060B] mt-0.5">{parsedExcelResult.duplicateCount}</p>
                 </div>
-                <div className="p-4 rounded-2xl bg-[#F7F9FC] border border-[#E0E6EF]">
+                <div className="p-4 rounded-2xl bg-white border border-[#E0E6EF] shadow-card">
                   <span className="text-[10px] font-bold text-[#94A3B8] uppercase">Incomplete Rows</span>
                   <p className="text-xl font-extrabold text-[#94A3B8] mt-0.5">{parsedExcelResult.invalidCount}</p>
                 </div>
               </div>
 
-              {/* Import Options */}
-              <div className="p-4 rounded-2xl bg-[#F7F9FC] border border-[#E0E6EF] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              {/* Import Options Bar */}
+              <div className="bg-white p-5 rounded-3xl border border-[#E0E6EF] shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <h4 className="text-xs font-bold text-[#111827]">Import Settings</h4>
-                  <p className="text-[11px] text-[#94A3B8]">Configure how the parsed doctor rows are saved to the platform</p>
+                  <p className="text-[11px] text-[#94A3B8]">Configure how the parsed doctor rows are committed to the directory</p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-4 text-xs">
@@ -694,14 +834,14 @@ export const SuperAdminDashboard = () => {
                 </div>
               </div>
 
-              {/* Parsed Rows Table */}
-              <div className="space-y-3">
+              {/* Parsed Rows Table Card */}
+              <div className="bg-white rounded-3xl border border-[#E0E6EF] p-6 shadow-card space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-extrabold text-[#111827]">
-                    Preview Parsed Rows ({parsedExcelResult.rows.length})
+                    Preview Parsed Doctor Records ({parsedExcelResult.rows.length})
                   </h4>
                   <span className="text-xs text-[#94A3B8]">
-                    Showing all parsed records before commit
+                    Live preview updating with column mapping
                   </span>
                 </div>
 
@@ -773,29 +913,29 @@ export const SuperAdminDashboard = () => {
                     </tbody>
                   </table>
                 </div>
-              </div>
 
-              {/* Commit Action Buttons */}
-              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={handleClearExcel}
-                  className="px-5 py-2.5 rounded-xl border border-[#E0E6EF] text-xs font-bold text-[#111827] hover:bg-[#F7F9FC]"
-                >
-                  Cancel &amp; Clear
-                </button>
+                {/* Commit Action Buttons */}
+                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={handleClearExcel}
+                    className="px-5 py-2.5 rounded-xl border border-[#E0E6EF] text-xs font-bold text-[#111827] hover:bg-[#F7F9FC]"
+                  >
+                    Cancel &amp; Clear
+                  </button>
 
-                <button
-                  type="button"
-                  disabled={isImportingExcel || parsedExcelResult.validCount === 0}
-                  onClick={handleConfirmExcelImport}
-                  className="px-6 py-2.5 rounded-xl bg-[#008F8F] hover:bg-[#007C7C] text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  {isImportingExcel
-                    ? 'Importing Doctors...'
-                    : `Import ${parsedExcelResult.validCount} Doctors into Directory`}
-                </button>
+                  <button
+                    type="button"
+                    disabled={isImportingExcel || parsedExcelResult.validCount === 0}
+                    onClick={handleConfirmExcelImport}
+                    className="px-6 py-2.5 rounded-xl bg-[#008F8F] hover:bg-[#007C7C] text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {isImportingExcel
+                      ? 'Importing Doctors...'
+                      : `Import ${parsedExcelResult.validCount} Doctors into Directory`}
+                  </button>
+                </div>
               </div>
             </div>
           )}
