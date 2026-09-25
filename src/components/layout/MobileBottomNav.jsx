@@ -1,16 +1,14 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Users, Search, User, MoreHorizontal } from 'lucide-react';
+import { Home, Users, Search, Info, User, MoreHorizontal } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const MobileBottomNav = () => {
   const { isAuthenticated, role } = useAuth();
   const location = useLocation();
 
-  // Determine profile link destination based on auth state & role
-  const profileLink = !isAuthenticated
-    ? '/login'
-    : role === 'super_admin'
+  // If authenticated, link to their portal dashboard; otherwise show About NSDA for normal users
+  const profileLink = role === 'super_admin'
     ? '/superadmin/dashboard'
     : role === 'admin'
     ? '/admin/dashboard'
@@ -20,7 +18,9 @@ export const MobileBottomNav = () => {
     { label: 'Home', path: '/', icon: Home },
     { label: 'Doctors', path: '/directory', icon: Users },
     { label: 'Search', path: '/search', icon: Search },
-    { label: 'Profile', path: profileLink, icon: User },
+    isAuthenticated
+      ? { label: 'Dashboard', path: profileLink, icon: User }
+      : { label: 'About', path: '/about', icon: Info },
     { label: 'More', path: '/more', icon: MoreHorizontal },
   ];
 

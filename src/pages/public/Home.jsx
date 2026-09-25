@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   Search,
   SlidersHorizontal,
-  UserPlus,
+  Users,
   QrCode,
   ArrowRight,
   ShieldCheck,
@@ -77,11 +77,11 @@ export const Home = () => {
 
           <div className="flex items-center gap-3">
             <Link
-              to="/register"
+              to="/directory"
               className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white text-[#008F8F] hover:bg-[#EFFAFA] text-xs font-bold transition-all shadow-md shrink-0"
             >
-              <UserPlus className="w-4 h-4" />
-              Join NSDA
+              <Users className="w-4 h-4" />
+              View Directory
             </Link>
             <button
               onClick={() => setQrOpen(true)}
@@ -141,18 +141,18 @@ export const Home = () => {
         {/* 3. Quick Action Cards */}
         <section className="grid grid-cols-2 gap-3 sm:gap-6">
           <Link
-            to="/register"
-            className="flex items-center gap-3 p-4 sm:p-5 rounded-3xl bg-white border border-[#E0E6EF] shadow-card hover:border-[#E3060B] transition-all group"
+            to="/directory"
+            className="flex items-center gap-3 p-4 sm:p-5 rounded-3xl bg-white border border-[#E0E6EF] shadow-card hover:border-[#008F8F] transition-all group"
           >
-            <div className="w-11 h-11 rounded-2xl bg-[#FFF0F0] text-[#E3060B] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-              <UserPlus className="w-5 h-5" />
+            <div className="w-11 h-11 rounded-2xl bg-[#EFFAFA] text-[#008F8F] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <Users className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-xs sm:text-sm font-bold text-[#111827] group-hover:text-[#E3060B] transition-colors">
-                Register as Doctor
+              <h3 className="text-xs sm:text-sm font-bold text-[#111827] group-hover:text-[#008F8F] transition-colors">
+                Browse Doctors
               </h3>
               <p className="text-[10px] sm:text-xs text-[#94A3B8]">
-                Get verified NSDA profile
+                Find verified specialists
               </p>
             </div>
           </Link>

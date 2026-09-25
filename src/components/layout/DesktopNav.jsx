@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, Users, Search, UserPlus, QrCode, Shield, Sparkles, LogIn } from 'lucide-react';
+import { Home, Users, Search, QrCode, Shield, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const DesktopNav = ({ onOpenQR }) => {
@@ -78,25 +78,7 @@ export const DesktopNav = ({ onOpenQR }) => {
               Share App (QR)
             </button>
 
-            {!isAuthenticated ? (
-              <>
-                <NavLink
-                  to="/register"
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-[#E3060B] text-white hover:bg-[#C20408] transition-colors shadow-xs"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  Register as Doctor
-                </NavLink>
-
-                <NavLink
-                  to="/login"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-[#E0E6EF] text-[#111827] hover:bg-[#F7F9FC] transition-colors"
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  Doctor Login
-                </NavLink>
-              </>
-            ) : (
+            {isAuthenticated && (
               <NavLink
                 to={
                   role === 'super_admin'

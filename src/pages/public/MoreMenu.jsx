@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   QrCode,
+  Users,
   UserPlus,
   LogIn,
   Info,
@@ -119,47 +120,59 @@ export const MoreMenu = () => {
           <ChevronRight className="w-4 h-4 text-[#94A3B8] group-hover:text-[#008F8F] group-hover:translate-x-0.5 transition-all" />
         </button>
 
-        {/* Register as Doctor */}
+        {/* Doctors Directory */}
         <Link
-          to="/register"
-          className="w-full flex items-center justify-between p-4 hover:bg-[#F7F9FC] transition-colors text-left group"
-        >
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-2xl bg-[#FFF0F0] text-[#E3060B] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <UserPlus className="w-5 h-5" />
-            </div>
-            <div>
-              <h4 className="text-xs sm:text-sm font-bold text-[#111827]">
-                Register as Doctor
-              </h4>
-              <p className="text-[11px] text-[#94A3B8]">
-                Create new verified practitioner account
-              </p>
-            </div>
-          </div>
-          <ChevronRight className="w-4 h-4 text-[#94A3B8] group-hover:text-[#E3060B] group-hover:translate-x-0.5 transition-all" />
-        </Link>
-
-        {/* Doctor Login */}
-        <Link
-          to={isAuthenticated ? '/doctor/dashboard' : '/login'}
+          to="/directory"
           className="w-full flex items-center justify-between p-4 hover:bg-[#F7F9FC] transition-colors text-left group"
         >
           <div className="flex items-center gap-3.5">
             <div className="w-10 h-10 rounded-2xl bg-[#EFFAFA] text-[#008F8F] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <LogIn className="w-5 h-5" />
+              <Users className="w-5 h-5" />
             </div>
             <div>
               <h4 className="text-xs sm:text-sm font-bold text-[#111827]">
-                {isAuthenticated ? 'Doctor Dashboard' : 'Doctor Login'}
+                Doctors Directory
               </h4>
               <p className="text-[11px] text-[#94A3B8]">
-                {isAuthenticated ? 'Manage profile & credentials' : 'Sign in to access your portal'}
+                Browse all verified NSDA doctors
               </p>
             </div>
           </div>
           <ChevronRight className="w-4 h-4 text-[#94A3B8] group-hover:text-[#008F8F] group-hover:translate-x-0.5 transition-all" />
         </Link>
+
+        {/* Doctor Dashboard (Only visible when authenticated) */}
+        {isAuthenticated && (
+          <Link
+            to={
+              role === 'super_admin'
+                ? '/superadmin/dashboard'
+                : role === 'admin'
+                ? '/admin/dashboard'
+                : '/doctor/dashboard'
+            }
+            className="w-full flex items-center justify-between p-4 hover:bg-[#F7F9FC] transition-colors text-left group"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF0F0] text-[#E3060B] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <LogIn className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-[#111827]">
+                  {role === 'super_admin'
+                    ? 'Super Admin Console'
+                    : role === 'admin'
+                    ? 'Admin Portal'
+                    : 'Doctor Dashboard'}
+                </h4>
+                <p className="text-[11px] text-[#94A3B8]">
+                  Manage profile, records &amp; credentials
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-[#94A3B8] group-hover:text-[#E3060B] group-hover:translate-x-0.5 transition-all" />
+          </Link>
+        )}
 
         {/* About NSDA */}
         <Link
@@ -288,15 +301,17 @@ export const MoreMenu = () => {
         </button>
       </div>
 
-      {/* Staff / Admin Gateway */}
-      <div className="text-center pt-2">
-        <Link
-          to={role === 'super_admin' ? '/superadmin/dashboard' : '/admin/dashboard'}
-          className="text-xs font-semibold text-[#94A3B8] hover:text-[#008F8F] transition-colors"
-        >
-          Staff &amp; Administrator Access
-        </Link>
-      </div>
+      {/* Staff & Doctor Portal Gateway (Discreet for authorized staff) */}
+      {!isAuthenticated && (
+        <div className="text-center pt-2">
+          <Link
+            to="/login"
+            className="text-[11px] text-[#94A3B8] hover:text-[#008F8F] transition-colors"
+          >
+            Doctor &amp; Staff Portal
+          </Link>
+        </div>
+      )}
 
       {/* Logout option if logged in */}
       {isAuthenticated && (

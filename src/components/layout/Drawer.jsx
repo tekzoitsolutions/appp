@@ -5,8 +5,6 @@ import {
   Home,
   Users,
   Search,
-  UserPlus,
-  LogIn,
   QrCode,
   Shield,
   FileText,
@@ -19,20 +17,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 
 export const Drawer = ({ isOpen, onClose, onOpenQR }) => {
-  const { user, role, logout, switchRole, isAuthenticated } = useAuth();
+  const { user, role, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { addToast } = useToast();
 
   if (!isOpen) return null;
-
-  const handleRoleSwitch = (newRole) => {
-    switchRole(newRole);
-    addToast(`Switched active session to: ${newRole.replace('_', ' ').toUpperCase()}`, 'info');
-    onClose();
-    if (newRole === 'super_admin') navigate('/superadmin/dashboard');
-    else if (newRole === 'admin') navigate('/admin/dashboard');
-    else navigate('/doctor/dashboard');
-  };
 
   const handleLogout = async () => {
     await logout();
@@ -68,7 +57,7 @@ export const Drawer = ({ isOpen, onClose, onOpenQR }) => {
               </button>
             </div>
 
-            {/* User profile card or login prompt */}
+            {/* User profile card or Directory Welcome */}
             <div className="p-4 border-b border-[#E0E6EF]">
               {isAuthenticated ? (
                 <div className="flex items-center gap-3 p-3 rounded-2xl bg-[#FFF0F0]/60 border border-[#E3060B]/20">
@@ -88,25 +77,17 @@ export const Drawer = ({ isOpen, onClose, onOpenQR }) => {
                   </div>
                 </div>
               ) : (
-                <div className="text-center p-3 rounded-2xl bg-[#EFFAFA] border border-[#008F8F]/20">
-                  <p className="text-xs font-semibold text-[#111827] mb-2">
-                    Are you a medical doctor?
-                  </p>
-                  <div className="flex gap-2">
-                    <Link
-                      to="/login"
-                      onClick={onClose}
-                      className="flex-1 py-1.5 rounded-xl bg-[#008F8F] text-white text-xs font-bold hover:bg-[#007C7C] transition-colors"
-                    >
-                      Login
-                    </Link>
-                    <Link
-                      to="/register"
-                      onClick={onClose}
-                      className="flex-1 py-1.5 rounded-xl border border-[#008F8F] text-[#008F8F] text-xs font-bold hover:bg-white transition-colors"
-                    >
-                      Register
-                    </Link>
+                <div className="p-3.5 rounded-2xl bg-[#EFFAFA] border border-[#008F8F]/20 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#008F8F] text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-[#111827]">
+                      NSDA Doctors Directory
+                    </h4>
+                    <p className="text-[10px] text-[#94A3B8] leading-tight mt-0.5">
+                      Connect with verified doctors &amp; specialists
+                    </p>
                   </div>
                 </div>
               )}
@@ -130,6 +111,14 @@ export const Drawer = ({ isOpen, onClose, onOpenQR }) => {
                 <Users className="w-4 h-4 text-[#94A3B8]" />
                 Doctors Directory
               </Link>
+              <Link
+                to="/search"
+                onClick={onClose}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-[#111827] hover:bg-[#F7F9FC] transition-colors"
+              >
+                <Search className="w-4 h-4 text-[#94A3B8]" />
+                Advanced Search
+              </Link>
               <button
                 onClick={() => {
                   onClose();
@@ -141,8 +130,8 @@ export const Drawer = ({ isOpen, onClose, onOpenQR }) => {
                 Share App (QR)
               </button>
 
-              {/* Role-based dashboard links */}
-              {role === 'doctor' && (
+              {/* Role-based dashboard links (Only when authenticated) */}
+              {isAuthenticated && role === 'doctor' && (
                 <Link
                   to="/doctor/dashboard"
                   onClick={onClose}
@@ -152,7 +141,7 @@ export const Drawer = ({ isOpen, onClose, onOpenQR }) => {
                   Doctor Dashboard
                 </Link>
               )}
-              {role === 'admin' && (
+              {isAuthenticated && role === 'admin' && (
                 <Link
                   to="/admin/dashboard"
                   onClick={onClose}
@@ -162,7 +151,7 @@ export const Drawer = ({ isOpen, onClose, onOpenQR }) => {
                   Admin Dashboard
                 </Link>
               )}
-              {role === 'super_admin' && (
+              {isAuthenticated && role === 'super_admin' && (
                 <Link
                   to="/superadmin/dashboard"
                   onClick={onClose}
@@ -202,48 +191,9 @@ export const Drawer = ({ isOpen, onClose, onOpenQR }) => {
             </div>
           </div>
 
-          {/* Bottom Switcher & Logout */}
-          <div className="p-4 bg-[#F7F9FC] border-t border-[#E0E6EF] space-y-3">
-            {/* Quick Role Switcher for Developer / Reviewer Testing */}
-            <div className="bg-white p-2.5 rounded-xl border border-[#E0E6EF]">
-              <span className="block text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider mb-1.5">
-                Quick Demo Switcher
-              </span>
-              <div className="grid grid-cols-3 gap-1">
-                <button
-                  onClick={() => handleRoleSwitch('doctor')}
-                  className={`py-1 rounded-lg text-[10px] font-bold transition-colors ${
-                    role === 'doctor'
-                      ? 'bg-[#008F8F] text-white'
-                      : 'bg-[#F7F9FC] text-[#111827] hover:bg-[#EFFAFA]'
-                  }`}
-                >
-                  Doctor
-                </button>
-                <button
-                  onClick={() => handleRoleSwitch('admin')}
-                  className={`py-1 rounded-lg text-[10px] font-bold transition-colors ${
-                    role === 'admin'
-                      ? 'bg-[#008F8F] text-white'
-                      : 'bg-[#F7F9FC] text-[#111827] hover:bg-[#EFFAFA]'
-                  }`}
-                >
-                  Admin
-                </button>
-                <button
-                  onClick={() => handleRoleSwitch('super_admin')}
-                  className={`py-1 rounded-lg text-[10px] font-bold transition-colors ${
-                    role === 'super_admin'
-                      ? 'bg-[#E3060B] text-white'
-                      : 'bg-[#F7F9FC] text-[#111827] hover:bg-[#FFF0F0]'
-                  }`}
-                >
-                  Super
-                </button>
-              </div>
-            </div>
-
-            {isAuthenticated && (
+          {/* Bottom Footer & Portal Gateway */}
+          <div className="p-4 bg-[#F7F9FC] border-t border-[#E0E6EF] text-center">
+            {isAuthenticated ? (
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-[#E3060B]/30 text-[#E3060B] hover:bg-[#FFF0F0] text-xs font-bold transition-colors"
@@ -251,6 +201,14 @@ export const Drawer = ({ isOpen, onClose, onOpenQR }) => {
                 <LogOut className="w-4 h-4" />
                 Logout
               </button>
+            ) : (
+              <Link
+                to="/login"
+                onClick={onClose}
+                className="text-[11px] font-medium text-[#94A3B8] hover:text-[#008F8F] transition-colors"
+              >
+                Doctor &amp; Staff Portal
+              </Link>
             )}
           </div>
         </div>
