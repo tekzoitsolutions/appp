@@ -30,6 +30,10 @@ import {
   FileUp,
   Sliders,
   HelpCircle,
+  Megaphone,
+  Plus,
+  Eye,
+  Edit2,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useAuth } from '../../context/AuthContext';
@@ -50,6 +54,11 @@ import {
   getLocalSettings,
   getLocalAuditLogs,
   getLocalDoctors,
+  getLocalAds,
+  addLocalAd,
+  updateLocalAd,
+  deleteLocalAd,
+  toggleLocalAdStatus,
 } from '../../services/storageService';
 import {
   downloadSampleExcelTemplate,
@@ -104,6 +113,22 @@ export const SuperAdminDashboard = () => {
   const [helpPhone, setHelpPhone] = useState('');
   const [helpEmail, setHelpEmail] = useState('');
 
+  // Advertisement states
+  const [ads, setAds] = useState([]);
+  const [adModalOpen, setAdModalOpen] = useState(false);
+  const [editingAd, setEditingAd] = useState(null);
+  const [adTitle, setAdTitle] = useState('');
+  const [adSubtitle, setAdSubtitle] = useState('');
+  const [adImageUrl, setAdImageUrl] = useState('');
+  const [adLinkUrl, setAdLinkUrl] = useState('');
+  const [adBadgeText, setAdBadgeText] = useState('Sponsored');
+  const [adCtaText, setAdCtaText] = useState('Learn More');
+  const [adIsActive, setAdIsActive] = useState(true);
+
+  // Delete Ad modal state
+  const [deleteAdModalOpen, setDeleteAdModalOpen] = useState(false);
+  const [adToDelete, setAdToDelete] = useState(null);
+
   useEffect(() => {
     loadSuperAdminData();
   }, []);
@@ -112,6 +137,7 @@ export const SuperAdminDashboard = () => {
     setDoctors(getLocalDoctors());
     setAdmins(getAdminUsers());
     setLogs(getLocalAuditLogs());
+    setAds(getLocalAds());
     const s = getLocalSettings();
     setSettings(s);
     setAboutDesc(s.about_nsda?.description || '');
@@ -263,6 +289,87 @@ export const SuperAdminDashboard = () => {
     }
   };
 
+  // Advertisement Actions by Super Admin
+  const openCreateAdModal = () => {
+    setEditingAd(null);
+    setAdTitle('');
+    setAdSubtitle('');
+    setAdImageUrl('https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop&q=80');
+    setAdLinkUrl('https://www.apollohospitals.com');
+    setAdBadgeText('Sponsored');
+    setAdCtaText('Learn More');
+    setAdIsActive(true);
+    setAdModalOpen(true);
+  };
+
+  const openEditAdModal = (ad) => {
+    setEditingAd(ad);
+    setAdTitle(ad.title || '');
+    setAdSubtitle(ad.subtitle || '');
+    setAdImageUrl(ad.image_url || '');
+    setAdLinkUrl(ad.link_url || '');
+    setAdBadgeText(ad.badge_text || 'Sponsored');
+    setAdCtaText(ad.cta_text || 'Learn More');
+    setAdIsActive(ad.is_active !== undefined ? ad.is_active : true);
+    setAdModalOpen(true);
+  };
+
+  const handleSaveAd = (e) => {
+    e.preventDefault();
+    if (!adTitle.trim()) {
+      addToast('Please enter an advertisement title', 'error');
+      return;
+    }
+
+    const payload = {
+      title: adTitle.trim(),
+      subtitle: adSubtitle.trim(),
+      image_url:
+        adImageUrl.trim() ||
+        'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop&q=80',
+      link_url: adLinkUrl.trim() || '#',
+      badge_text: adBadgeText.trim() || 'Sponsored',
+      cta_text: adCtaText.trim() || 'Learn More',
+      is_active: adIsActive,
+    };
+
+    if (editingAd) {
+      updateLocalAd(editingAd.id, payload, 'Super Admin');
+      addToast('Advertisement updated successfully', 'success');
+    } else {
+      addLocalAd(payload, 'Super Admin');
+      addToast('New advertisement banner published to Home page!', 'success');
+    }
+
+    setAdModalOpen(false);
+    loadSuperAdminData();
+  };
+
+  const handleToggleAdStatus = (adId) => {
+    const updated = toggleLocalAdStatus(adId, 'Super Admin');
+    if (updated) {
+      addToast(
+        `Ad is now ${updated.is_active ? 'LIVE on Home page' : 'PAUSED (Hidden from Home page)'}`,
+        'info'
+      );
+      loadSuperAdminData();
+    }
+  };
+
+  const openDeleteAdModal = (ad) => {
+    setAdToDelete(ad);
+    setDeleteAdModalOpen(true);
+  };
+
+  const confirmDeleteAd = () => {
+    if (!adToDelete) return;
+    deleteLocalAd(adToDelete.id, 'Super Admin');
+    addToast(`Advertisement "${adToDelete.title}" was removed`, 'success');
+    setDeleteAdModalOpen(false);
+    setAdToDelete(null);
+    loadSuperAdminData();
+  };
+
   // Admin Management Actions
   const handleCreateAdmin = (e) => {
     e.preventDefault();
@@ -374,6 +481,7 @@ export const SuperAdminDashboard = () => {
         {[
           { key: 'doctors', label: `Manage Doctors (${doctors.length})`, icon: Stethoscope },
           { key: 'excel_import', label: 'Upload Excel Data', icon: FileSpreadsheet },
+          { key: 'ads', label: `Advertisements (${ads.length})`, icon: Megaphone },
           { key: 'admins', label: `Admin Management (${admins.length})`, icon: Shield },
           { key: 'settings', label: 'Platform Content & Settings', icon: Settings },
           { key: 'logs', label: 'Audit Trail Logs', icon: Clock },
@@ -942,6 +1050,186 @@ export const SuperAdminDashboard = () => {
         </div>
       )}
 
+      {/* TAB: ADVERTISEMENTS & HOME BANNERS */}
+      {activeTab === 'ads' && (
+        <div className="space-y-6">
+          {/* Header & Add Button */}
+          <div className="bg-white rounded-3xl border border-[#E0E6EF] p-6 shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="w-9 h-9 rounded-2xl bg-[#008F8F]/10 text-[#008F8F] flex items-center justify-center font-bold">
+                  <Megaphone className="w-5 h-5" />
+                </span>
+                <h3 className="text-base font-extrabold text-[#111827]">
+                  Home Page Advertisements &amp; Banners
+                </h3>
+              </div>
+              <p className="text-xs text-[#94A3B8] mt-1">
+                Manually add, edit, or toggle promotional partner banners displayed at the bottom of the public Home page.
+              </p>
+            </div>
+
+            <button
+              onClick={openCreateAdModal}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#008F8F] hover:bg-[#007C7C] text-white text-xs font-bold transition-all shadow-md shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              Add Advertisement
+            </button>
+          </div>
+
+          {/* Stats Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-2xl border border-[#E0E6EF] shadow-card">
+              <span className="text-[10px] font-bold text-[#94A3B8] uppercase">
+                Total Ads
+              </span>
+              <p className="text-xl font-extrabold text-[#111827] mt-0.5">
+                {ads.length}
+              </p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-[#E0E6EF] shadow-card">
+              <span className="text-[10px] font-bold text-[#94A3B8] uppercase">
+                Live on Home Page
+              </span>
+              <p className="text-xl font-extrabold text-[#008F8F] mt-0.5">
+                {ads.filter((a) => a.is_active).length}
+              </p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-[#E0E6EF] shadow-card">
+              <span className="text-[10px] font-bold text-[#94A3B8] uppercase">
+                Total Clicks Tracked
+              </span>
+              <p className="text-xl font-extrabold text-[#E3060B] mt-0.5">
+                {ads.reduce((acc, a) => acc + (a.clicks || 0), 0)}
+              </p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-[#E0E6EF] shadow-card">
+              <span className="text-[10px] font-bold text-[#94A3B8] uppercase">
+                Display Location
+              </span>
+              <p className="text-xs font-bold text-[#008F8F] mt-1 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Bottom of Home
+              </p>
+            </div>
+          </div>
+
+          {/* Ads List */}
+          {ads.length === 0 ? (
+            <div className="bg-white rounded-3xl border border-[#E0E6EF] p-12 text-center shadow-card space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#EFFAFA] text-[#008F8F] flex items-center justify-center mx-auto">
+                <Megaphone className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-bold text-[#111827]">No advertisements created yet</h4>
+              <p className="text-xs text-[#94A3B8] max-w-sm mx-auto">
+                Click below to create your first partner banner to display on the home page.
+              </p>
+              <button
+                onClick={openCreateAdModal}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#008F8F] text-white text-xs font-bold hover:bg-[#007C7C]"
+              >
+                <Plus className="w-4 h-4" />
+                Create First Ad
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {ads.map((ad) => (
+                <div
+                  key={ad.id}
+                  className={`bg-white rounded-3xl border transition-all duration-300 p-5 shadow-card flex flex-col justify-between ${
+                    ad.is_active ? 'border-[#008F8F]/40 ring-1 ring-[#008F8F]/20' : 'border-[#E0E6EF] opacity-75'
+                  }`}
+                >
+                  <div className="space-y-3">
+                    {/* Top Row: Badge, Status, Clicks */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#EFFAFA] text-[#008F8F] border border-[#008F8F]/30">
+                          {ad.badge_text || 'Sponsored'}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                            ad.is_active
+                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                              : 'bg-gray-100 text-gray-500 border border-gray-200'
+                          }`}
+                        >
+                          {ad.is_active ? 'Live on Home' : 'Paused / Draft'}
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] font-semibold text-[#94A3B8] flex items-center gap-1">
+                        <Eye className="w-3.5 h-3.5 text-[#008F8F]" />
+                        <span>{ad.clicks || 0} Clicks</span>
+                      </div>
+                    </div>
+
+                    {/* Image & Title/Subtitle preview */}
+                    <div className="flex gap-4 items-start">
+                      <img
+                        src={ad.image_url}
+                        alt={ad.title}
+                        className="w-24 h-20 rounded-xl object-cover shrink-0 border border-[#E0E6EF]"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-sm font-bold text-[#111827] line-clamp-1">
+                          {ad.title}
+                        </h4>
+                        <p className="text-xs text-[#94A3B8] mt-1 line-clamp-2">
+                          {ad.subtitle || 'No description provided'}
+                        </p>
+                        <a
+                          href={ad.link_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#008F8F] hover:underline mt-1 truncate max-w-full"
+                        >
+                          <span className="truncate">{ad.link_url}</span>
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottom Actions */}
+                  <div className="pt-4 mt-4 border-t border-[#E0E6EF] flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => handleToggleAdStatus(ad.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                        ad.is_active
+                          ? 'border border-[#E0E6EF] text-[#111827] hover:bg-[#F7F9FC]'
+                          : 'bg-[#008F8F] text-white hover:bg-[#007C7C]'
+                      }`}
+                    >
+                      {ad.is_active ? 'Pause Ad' : 'Activate on Home'}
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openEditAdModal(ad)}
+                        className="p-2 rounded-xl border border-[#E0E6EF] text-[#111827] hover:bg-[#F7F9FC] transition-colors"
+                        title="Edit advertisement"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => openDeleteAdModal(ad)}
+                        className="p-2 rounded-xl border border-[#E3060B]/30 text-[#E3060B] hover:bg-[#FFF0F0] transition-colors"
+                        title="Delete advertisement"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* TAB 3: ADMIN MANAGEMENT */}
       {activeTab === 'admins' && (
         <div className="space-y-6">
@@ -1252,6 +1540,262 @@ export const SuperAdminDashboard = () => {
               >
                 <Trash2 className="w-4 h-4" />
                 {deleting ? 'Deleting...' : 'Permanently Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE / EDIT ADVERTISEMENT MODAL */}
+      {adModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-[#E0E6EF] relative my-8">
+            <button
+              onClick={() => setAdModalOpen(false)}
+              className="absolute top-4 right-4 text-[#94A3B8] hover:text-[#111827] p-1.5 rounded-full hover:bg-[#F7F9FC]"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-11 h-11 rounded-2xl bg-[#008F8F]/10 text-[#008F8F] flex items-center justify-center shrink-0">
+                <Megaphone className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-[#111827]">
+                  {editingAd ? 'Edit Advertisement' : 'Create Home Page Advertisement'}
+                </h3>
+                <p className="text-xs text-[#94A3B8]">
+                  This banner will be featured at the bottom of the public Home page.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveAd} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold text-[#111827] mb-1">
+                  Ad Title / Headline <span className="text-[#E3060B]">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={adTitle}
+                  onChange={(e) => setAdTitle(e.target.value)}
+                  placeholder="e.g. Apollo Comprehensive Health Checkup"
+                  className="w-full bg-[#F7F9FC] border border-[#E0E6EF] rounded-xl px-3.5 py-2.5 text-xs text-[#111827] focus:outline-none focus:border-[#008F8F]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-[#111827] mb-1">
+                  Short Description / Subtitle
+                </label>
+                <textarea
+                  rows={2}
+                  value={adSubtitle}
+                  onChange={(e) => setAdSubtitle(e.target.value)}
+                  placeholder="e.g. 25% off comprehensive health checkup with home sample pickup."
+                  className="w-full bg-[#F7F9FC] border border-[#E0E6EF] rounded-xl px-3.5 py-2 text-xs text-[#111827] focus:outline-none focus:border-[#008F8F] resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#111827] mb-1">
+                    Badge Text
+                  </label>
+                  <input
+                    type="text"
+                    value={adBadgeText}
+                    onChange={(e) => setAdBadgeText(e.target.value)}
+                    placeholder="e.g. Sponsored, Partner Offer"
+                    className="w-full bg-[#F7F9FC] border border-[#E0E6EF] rounded-xl px-3.5 py-2 text-xs text-[#111827] focus:outline-none focus:border-[#008F8F]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#111827] mb-1">
+                    Button CTA Label
+                  </label>
+                  <input
+                    type="text"
+                    value={adCtaText}
+                    onChange={(e) => setAdCtaText(e.target.value)}
+                    placeholder="e.g. Learn More, Book Test"
+                    className="w-full bg-[#F7F9FC] border border-[#E0E6EF] rounded-xl px-3.5 py-2 text-xs text-[#111827] focus:outline-none focus:border-[#008F8F]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-[#111827] mb-1">
+                  Destination Link URL
+                </label>
+                <input
+                  type="url"
+                  value={adLinkUrl}
+                  onChange={(e) => setAdLinkUrl(e.target.value)}
+                  placeholder="https://example.com/promotion"
+                  className="w-full bg-[#F7F9FC] border border-[#E0E6EF] rounded-xl px-3.5 py-2 text-xs text-[#111827] focus:outline-none focus:border-[#008F8F]"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-bold text-[#111827]">
+                    Banner Image URL
+                  </label>
+                  <span className="text-[10px] text-[#94A3B8]">Or pick a preset below:</span>
+                </div>
+                <input
+                  type="url"
+                  value={adImageUrl}
+                  onChange={(e) => setAdImageUrl(e.target.value)}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full bg-[#F7F9FC] border border-[#E0E6EF] rounded-xl px-3.5 py-2 text-xs text-[#111827] focus:outline-none focus:border-[#008F8F]"
+                />
+
+                {/* Preset Image Options */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+                  {[
+                    { label: '🏥 Lab Checkup', url: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop&q=80' },
+                    { label: '🎓 CME Summit', url: 'https://images.unsplash.com/photo-1511556532299-8f662fc26c06?w=800&auto=format&fit=crop&q=80' },
+                    { label: '🏨 Hospital', url: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=800&auto=format&fit=crop&q=80' },
+                    { label: '💊 Pharmacy', url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=800&auto=format&fit=crop&q=80' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setAdImageUrl(preset.url)}
+                      className={`px-2 py-1.5 rounded-lg text-[10px] font-semibold border transition-all truncate text-left ${
+                        adImageUrl === preset.url
+                          ? 'border-[#008F8F] bg-[#EFFAFA] text-[#008F8F]'
+                          : 'border-[#E0E6EF] bg-[#F7F9FC] text-[#111827] hover:bg-white'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status Toggle */}
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="adActiveCheck"
+                  checked={adIsActive}
+                  onChange={(e) => setAdIsActive(e.target.checked)}
+                  className="w-4 h-4 text-[#008F8F] rounded border-[#E0E6EF] focus:ring-[#008F8F]"
+                />
+                <label htmlFor="adActiveCheck" className="text-xs font-bold text-[#111827] cursor-pointer">
+                  Activate &amp; display on Home Page immediately
+                </label>
+              </div>
+
+              {/* Image Preview Box */}
+              {adImageUrl && (
+                <div className="p-3 rounded-2xl bg-[#F7F9FC] border border-[#E0E6EF] space-y-1.5">
+                  <span className="text-[10px] font-bold text-[#94A3B8] uppercase">
+                    Banner Preview
+                  </span>
+                  <div className="h-28 w-full rounded-xl overflow-hidden relative">
+                    <img
+                      src={adImageUrl}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.src = 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop&q=80';
+                      }}
+                    />
+                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-[#008F8F] text-white text-[9px] font-bold uppercase">
+                      {adBadgeText || 'Sponsored'}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAdModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-[#E0E6EF] text-xs font-bold text-[#111827] hover:bg-[#F7F9FC]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-[#008F8F] hover:bg-[#007C7C] text-white text-xs font-bold transition-colors shadow-sm"
+                >
+                  {editingAd ? 'Save Changes' : 'Publish Advertisement'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETE ADVERTISEMENT MODAL */}
+      {deleteAdModalOpen && adToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E0E6EF] relative">
+            <button
+              onClick={() => setDeleteAdModalOpen(false)}
+              className="absolute top-4 right-4 text-[#94A3B8] hover:text-[#111827] p-1.5 rounded-full hover:bg-[#F7F9FC]"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#FFF0F0] text-[#E3060B] flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-[#111827]">
+                  Delete Advertisement?
+                </h3>
+                <p className="text-xs text-[#E3060B] font-semibold">
+                  Remove from Home page
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-[#F7F9FC] rounded-2xl p-4 border border-[#E0E6EF] space-y-2 mb-4 text-xs">
+              <div className="flex items-center gap-3">
+                <img
+                  src={adToDelete.image_url}
+                  alt={adToDelete.title}
+                  className="w-12 h-12 rounded-xl object-cover shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="font-bold text-[#111827] text-sm truncate">
+                    {adToDelete.title}
+                  </p>
+                  <p className="text-[#94A3B8] text-[11px] truncate">
+                    Target: {adToDelete.link_url}
+                  </p>
+                </div>
+              </div>
+              <p className="text-[#111827]/80 text-[11px] pt-2 border-t border-[#E0E6EF]">
+                This will delete the advertisement banner from the platform and remove it from the home page.
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteAdModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl border border-[#E0E6EF] text-xs font-bold text-[#111827] hover:bg-[#F7F9FC]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteAd}
+                className="flex-1 py-2.5 rounded-xl bg-[#E3060B] hover:bg-[#C20408] text-white text-xs font-bold transition-colors shadow-sm flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete Advertisement
               </button>
             </div>
           </div>

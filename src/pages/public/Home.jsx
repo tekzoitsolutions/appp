@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { DoctorCard } from '../../components/doctor/DoctorCard';
+import { HomeAdBanner } from '../../components/home/HomeAdBanner';
 import { QRCodeModal } from '../../components/common/QRCodeModal';
 import { fetchDoctors } from '../../services/doctorService';
 import { getLocalSpecialties } from '../../services/storageService';
@@ -217,6 +218,9 @@ export const Home = () => {
             </div>
           )}
         </section>
+
+        {/* 5. Promotional / Partner Advertisements (Configured by Super Admin) */}
+        <HomeAdBanner />
       </div>
 
       <QRCodeModal
